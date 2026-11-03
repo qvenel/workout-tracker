@@ -120,9 +120,11 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     // after the FLIP frame, so layout is final
     requestAnimationFrame(() => {
       const y = root.getBoundingClientRect().top + target.offsetTop; // position in the viewport
-      // only move when the step sits low on screen or hides under the bar
-      if (y > HEADER_COMPACT + 8 && y < window.innerHeight * 0.35) return;
-      window.scrollTo({ top: Math.max(0, window.scrollY + y - HEADER_COMPACT - 8), behavior: first ? 'auto' : 'smooth' });
+      // opening the session: leave the page at the top if the step is already in view
+      if (first && y < window.innerHeight * 0.6) return;
+      const delta = y - HEADER_COMPACT - 8;
+      if (Math.abs(delta) < 6) return;
+      window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: first ? 'auto' : 'smooth' });
     });
   }, [focusKey]);
 
