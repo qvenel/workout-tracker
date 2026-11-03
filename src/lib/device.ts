@@ -12,25 +12,37 @@ export function unlockAudio() {
   }
 }
 
+function tone(freq: number, at: number, len = 0.18) {
+  if (!ctx) return;
+  const t0 = ctx.currentTime + at;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(0.4, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + len + 0.02);
+}
+
+/** Short single beep: another 30 s of rest gone. */
+export function beepMark() {
+  try {
+    navigator.vibrate?.(120);
+  } catch {
+    /* ignore */
+  }
+  tone(880, 0);
+}
+
 export function alertRestOver() {
   try {
     navigator.vibrate?.([300, 150, 300]);
   } catch {
     /* ignore */
   }
-  if (!ctx) return;
-  const t0 = ctx.currentTime;
-  [0, 0.25, 0.5].forEach((dt, i) => {
-    const osc = ctx!.createOscillator();
-    const gain = ctx!.createGain();
-    osc.frequency.value = i === 2 ? 1320 : 880;
-    gain.gain.setValueAtTime(0.0001, t0 + dt);
-    gain.gain.exponentialRampToValueAtTime(0.4, t0 + dt + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.18);
-    osc.connect(gain).connect(ctx!.destination);
-    osc.start(t0 + dt);
-    osc.stop(t0 + dt + 0.2);
-  });
+  [0, 0.25, 0.5].forEach((dt, i) => tone(i === 2 ? 1320 : 880, dt));
 }
 
 let lock: WakeLockSentinel | null = null;

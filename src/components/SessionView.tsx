@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import Sortable from 'sortablejs';
 import type { Data, Exercise } from '../lib/data';
-import { alertRestOver } from '../lib/device';
+import { alertRestOver, beepMark } from '../lib/device';
 import { clock, formatSet } from '../lib/format';
 import {
   type ActiveSession,
@@ -60,11 +60,18 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const patchStep = (id: string, patch: Partial<Step>) =>
     setSteps(sessionRef.current.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
-  // Rest finished naturally -> beep + vibrate once
+  // Short beep when 30 s, 1:00, 1:30… are left; triple beep + vibration when rest is over
   useEffect(() => {
-    if (lastDone && active && !lastDone.restSkipped && !lastDone.restAlerted && lastDone.restSec && restLeft <= 0) {
+    if (!lastDone || !active || lastDone.restSkipped || lastDone.restAlerted || !lastDone.restSec) return;
+    if (restLeft <= 0) {
       alertRestOver();
       patchStep(lastDone.id, { restAlerted: true });
+      return;
+    }
+    const mark = Math.ceil(restLeft / 30) * 30;
+    if (mark < lastDone.restSec && (lastDone.restBeepedAt == null || mark < lastDone.restBeepedAt)) {
+      beepMark();
+      patchStep(lastDone.id, { restBeepedAt: mark });
     }
   });
 

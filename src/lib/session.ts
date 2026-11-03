@@ -16,6 +16,8 @@ export interface Step extends SetValues {
   restSec?: number;
   restSkipped?: boolean;
   restAlerted?: boolean;
+  /** smallest "time left" mark (multiple of 30 s) already announced */
+  restBeepedAt?: number;
 }
 
 export interface ActiveSession {
