@@ -22,11 +22,20 @@ export interface Step extends SetValues {
   restBeepedAt?: number;
 }
 
+export interface Warmup {
+  sec: number;
+  skipped?: boolean;
+  alerted?: boolean;
+  beepedAt?: number;
+}
+
 export interface ActiveSession {
   name: string;
   startedAt: number;
   steps: Step[];
   newExercises: Exercise[];
+  /** countdown at the very start of the session, from startedAt */
+  warmup?: Warmup;
 }
 
 export interface PendingSession {
@@ -42,6 +51,7 @@ export interface PendingSession {
 const KEY = 'session:active';
 const PENDING = 'session:pending';
 export const DEFAULT_REST = 120;
+export const DEFAULT_WARMUP = 300;
 
 export const loadActive = () => load<ActiveSession | null>(KEY, null);
 export const saveActive = (s: ActiveSession | null) => save(KEY, s);
@@ -90,7 +100,7 @@ export function sessionFromTemplate(data: Data, name: string): ActiveSession {
     seen[t.exercise] = (seen[t.exercise] ?? 0) + 1;
     return makeStep(data, t.exercise, seen[t.exercise], t);
   });
-  return { name, startedAt: Date.now(), steps, newExercises: [] };
+  return { name, startedAt: Date.now(), steps, newExercises: [], warmup: { sec: DEFAULT_WARMUP } };
 }
 
 /** Next template in the cycle after the most recent session. */
@@ -140,9 +150,9 @@ export type RestSignal = { kind: 'end' } | { kind: 'mark'; mark: number } | null
  * What to play now during a rest: a short beep each time 30 s, 1:00, 1:30… are left
  * (never at the very start), the end alert when time is up.
  */
-export function restSignal(restSec: number, left: number, beepedAt: number | undefined): RestSignal {
+export function restSignal(restSec: number, left: number, beepedAt: number | undefined, every = 30): RestSignal {
   if (left <= 0) return { kind: 'end' };
-  const mark = Math.ceil(left / 30) * 30;
+  const mark = Math.ceil(left / every) * every;
   if (mark < restSec && (beepedAt == null || mark < beepedAt)) return { kind: 'mark', mark };
   return null;
 }

@@ -61,6 +61,11 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const lastDone = done[done.length - 1];
   const restLeft = lastDone?.doneAt && lastDone.restSec ? lastDone.restSec - (now - lastDone.doneAt) / 1000 : 0;
   const resting = !!lastDone && !lastDone.restSkipped && !!active && restLeft > 0;
+  const warmup = session.warmup;
+  const warmupLeft = warmup ? warmup.sec - (now - session.startedAt) / 1000 : 0;
+  const warmingUp = !!warmup && !warmup.skipped && !warmup.alerted && !done.length && warmupLeft > 0;
+  const setWarmup = (patch: Partial<NonNullable<ActiveSession['warmup']>>) =>
+    onChange({ ...sessionRef.current, warmup: { ...sessionRef.current.warmup!, ...patch } });
 
   const setSteps = (next: Step[]) => onChange({ ...sessionRef.current, steps: next });
   const patchStep = (id: string, patch: Partial<Step>) =>
@@ -76,6 +81,19 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     } else if (signal?.kind === 'mark') {
       beepMark();
       patchStep(lastDone.id, { restBeepedAt: signal.mark });
+    }
+  });
+
+  // Warm-up: short beep at each minute left, triple beep when over
+  useEffect(() => {
+    if (!warmup || warmup.skipped || warmup.alerted || done.length) return;
+    const signal = restSignal(warmup.sec, warmupLeft, warmup.beepedAt, 60);
+    if (signal?.kind === 'end') {
+      alertRestOver();
+      setWarmup({ alerted: true });
+    } else if (signal?.kind === 'mark') {
+      beepMark();
+      setWarmup({ beepedAt: signal.mark });
     }
   });
 
@@ -186,6 +204,22 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
             <span class="grow">{showAllDone ? 'Masquer les séries faites' : plural(hiddenCount, 'série faite', 'séries faites')}</span>
             <span class={`chev ${showAllDone ? "up" : ""}`}><Chevron /></span>
           </button>
+        )}
+
+        {warmingUp && warmup && (
+          <section class="rest warmup" role="timer" aria-label="Échauffement en cours" data-flip="warmup">
+            <div class="grow">
+              <span class="rest-label">Échauffement</span>
+              <span class={`rest-time ${warmupLeft <= 5 ? 'ending' : ''}`}>{clock(warmupLeft)}</span>
+            </div>
+            <button type="button" class="rest-btn" onClick={() => setWarmup({ sec: Math.max(60, warmup.sec - 60) })} aria-label="Une minute de moins">−1′</button>
+            <button type="button" class="rest-btn" onClick={() => setWarmup({ sec: warmup.sec + 60 })} aria-label="Une minute de plus">+1′</button>
+            <button type="button" class="rest-btn solid" onClick={() => setWarmup({ skipped: true })}>Passer</button>
+            <div class="rest-bar" style={{ width: `${Math.min(100, (1 - warmupLeft / warmup.sec) * 100)}%` }} />
+          </section>
+        )}
+        {warmup && !warmingUp && (showAllDone || done.length <= 2) && (
+          <div class="rest-line" data-flip="warmup-line"><Timer size={14} /> Échauffement</div>
         )}
 
         {visibleDone.map((s, i) => {
