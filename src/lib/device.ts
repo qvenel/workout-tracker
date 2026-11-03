@@ -14,6 +14,7 @@ export function unlockAudio() {
 
 function tone(freq: number, at: number, len = 0.18) {
   if (!ctx) return;
+  if (ctx.state === 'suspended') void ctx.resume();
   const t0 = ctx.currentTime + at;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();

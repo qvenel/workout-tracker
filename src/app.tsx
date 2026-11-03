@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Home } from './components/Home';
 import { SessionView } from './components/SessionView';
 import { SettingsView } from './components/SettingsView';
@@ -41,7 +41,16 @@ export function App() {
     try {
       setData(await fetchData(source));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Chargement impossible');
+      const offline = e instanceof TypeError || !navigator.onLine;
+      setError(
+        offline
+          ? data
+            ? 'Hors ligne : historique en cache utilisé'
+            : 'Hors ligne : impossible de charger l’historique'
+          : e instanceof Error
+            ? e.message
+            : 'Chargement impossible',
+      );
     } finally {
       setLoading(false);
     }
@@ -71,6 +80,22 @@ export function App() {
   }, [source]);
 
   useEffect(() => keepAwake(!!active), [!!active]);
+
+  // retry uploads as soon as the network or the app comes back
+  const retryRef = useRef(() => {});
+  retryRef.current = () => {
+    if (pending.length && !syncing && navigator.onLine) void sync(pending);
+  };
+  useEffect(() => {
+    const onWake = () => document.visibilityState === 'visible' && retryRef.current();
+    const onOnline = () => retryRef.current();
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onWake);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onWake);
+    };
+  }, []);
 
   const updateActive = (s: ActiveSession | null) => {
     setActive(s);

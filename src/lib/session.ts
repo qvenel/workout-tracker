@@ -9,6 +9,8 @@ export interface Step extends SetValues {
   fields: { weight: boolean; rings: boolean; bands: boolean };
   /** what was done last time for this set, for display */
   last: SetValues | null;
+  /** values the set was prefilled with, to tell what the user changed */
+  planned?: Pick<SetValues, 'weight' | 'rings' | 'bands'> & { fields: Step['fields'] };
   status: 'todo' | 'done';
   touched: boolean;
   doneAt?: number;
@@ -63,6 +65,7 @@ export function makeStep(data: Data, exercise: string, nth: number, tpl?: Templa
   const weight = last?.weight ?? tpl?.weight_kg ?? null;
   const rings = last?.rings ?? tpl?.rings_level ?? null;
   const bands = last?.bands ?? null;
+  const fields = { weight: weight != null, rings: rings != null, bands: bands != null };
   return {
     id: newId(),
     exercise,
@@ -72,7 +75,8 @@ export function makeStep(data: Data, exercise: string, nth: number, tpl?: Templa
     rings,
     bands,
     badForm: null,
-    fields: { weight: weight != null, rings: rings != null, bands: bands != null },
+    fields,
+    planned: { weight, rings, bands, fields },
     last: last && { value: last.value, weight: last.weight, rings: last.rings, bands: last.bands, badForm: last.badForm },
     status: 'todo',
     touched: false,
@@ -105,13 +109,42 @@ export function nthOfExercise(steps: Step[], index: number): number {
   return steps.slice(0, index + 1).filter((s) => s.exercise === ex).length;
 }
 
-/** After validating a set, carry weight / rings / bands to the following untouched sets of the same exercise. */
+/**
+ * After validating a set, carry what the user *changed* (weight, rings, band) to the following untouched
+ * sets of the same exercise that were planned with the same value. Back-off sets planned lighter keep
+ * their own weight: 15 kg → 17.5 kg on set 1 moves the other 15 kg sets, not the 10 kg ones.
+ */
 export function propagate(steps: Step[], from: Step): Step[] {
-  return steps.map((s) =>
-    s.status === 'todo' && !s.touched && s.exercise === from.exercise && s.id !== from.id
-      ? { ...s, weight: from.weight, rings: from.rings, bands: from.bands, fields: { ...from.fields } }
-      : s,
+  const plan = from.planned;
+  if (!plan) return steps;
+  const keys = (['weight', 'rings', 'bands'] as const).filter(
+    (k) => from[k] !== plan[k] || from.fields[k] !== plan.fields[k],
   );
+  if (!keys.length) return steps;
+  return steps.map((s) => {
+    if (s.status !== 'todo' || s.touched || s.exercise !== from.exercise || s.id === from.id) return s;
+    const next = { ...s, fields: { ...s.fields } };
+    for (const k of keys) {
+      const same = s[k] === plan[k] && s.fields[k] === plan.fields[k];
+      if (!same) continue;
+      next[k] = from[k];
+      next.fields[k] = from.fields[k];
+    }
+    return next;
+  });
+}
+
+export type RestSignal = { kind: 'end' } | { kind: 'mark'; mark: number } | null;
+
+/**
+ * What to play now during a rest: a short beep each time 30 s, 1:00, 1:30… are left
+ * (never at the very start), the end alert when time is up.
+ */
+export function restSignal(restSec: number, left: number, beepedAt: number | undefined): RestSignal {
+  if (left <= 0) return { kind: 'end' };
+  const mark = Math.ceil(left / 30) * 30;
+  if (mark < restSec && (beepedAt == null || mark < beepedAt)) return { kind: 'mark', mark };
+  return null;
 }
 
 export function toPending(s: ActiveSession, comment: string, now = Date.now()): PendingSession {

@@ -150,15 +150,17 @@ h1 { margin: 2px 0 0; font-family: var(--cond); font-size: 44px; line-height: 1;
 .pm:active { background: var(--chip); }
 .pm.small { width: 44px; height: 44px; border-radius: 12px; background: var(--tile); font-size: 20px; }
 
-.minis { display: grid; grid-template-columns: 1fr; gap: 8px 10px; }
+.minis { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .minis.two { grid-template-columns: 1fr 1fr; }
-.mini { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-.mini-label { font-size: 14px; color: var(--ink-2); line-height: 1.15; }
-.mini-ctrl { display: flex; align-items: center; gap: 4px; }
+.mini { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px 8px; border-radius: 14px; background: var(--tile); }
+.minis:not(.two) .mini { flex-direction: row; justify-content: space-between; padding: 4px 6px 4px 12px; }
+.mini-label { font-size: 13px; color: var(--muted); line-height: 1.15; }
+.mini-ctrl { display: flex; align-items: center; gap: 2px; }
 .mini .num {
-  width: 2.6ch; text-align: center; border: none; background: transparent; padding: 0;
+  width: 3.4ch; text-align: center; border: none; background: transparent; padding: 0;
   font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
 }
+.mini .pm.small { background: #fff; }
 .num.muted, .num::placeholder { color: var(--faint); }
 
 /* ---------- upcoming ---------- */
@@ -181,6 +183,7 @@ h1 { margin: 2px 0 0; font-family: var(--cond); font-size: 44px; line-height: 1;
   padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px;
   width: 100%; max-width: 520px; margin: 0 auto;
 }
+.sheet > * { flex-shrink: 0; }
 .sheet .card { box-shadow: none; padding: 0; }
 .grabber { align-self: center; width: 44px; height: 5px; border-radius: 3px; background: #dde1de; }
 .sheet-title { margin: 0 4px; font-size: 22px; font-weight: 700; }
@@ -240,3 +243,6 @@ h1 { margin: 2px 0 0; font-family: var(--cond); font-size: 44px; line-height: 1;
 .transport { display: flex; align-items: center; justify-content: center; gap: 24px; }
 .cam-foot { padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
 .light { width: 100%; height: 60px; border-radius: 20px; background: var(--dark-text); color: #0d100f; font-size: 19px; font-weight: 700; }
+
+.all-done { display: flex; flex-direction: column; gap: 2px; padding: 16px; border-radius: 18px; background: var(--card); color: var(--muted); }
+.all-done strong { color: var(--ink); font-size: 17px; }

@@ -71,14 +71,14 @@ export function Home(p: Props) {
           </div>
         )}
 
-        {names.length > 1 && (
+        {p.data && (
           <div class="chips">
             {names.map((n) => (
               <button type="button" key={n} class={`chip ${n === current ? 'on' : ''}`} onClick={() => p.onSelect(n)}>
                 {n}
               </button>
             ))}
-            <button type="button" class="chip" onClick={() => p.onStart('Séance libre')}>
+            <button type="button" class="chip" onClick={() => p.onStart('Free session')}>
               Séance libre
             </button>
           </div>

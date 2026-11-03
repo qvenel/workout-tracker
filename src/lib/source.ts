@@ -95,7 +95,8 @@ export class LocalSource implements DataSource {
   async commit(changes: FileChange[]) {
     const files = [];
     for (const c of changes) files.push({ path: c.path, content: c.update(await this.read(c.path)) });
-    await fetch('/__local-data/__commit', { method: 'POST', body: JSON.stringify({ files }) });
+    const res = await fetch('/__local-data/__commit', { method: 'POST', body: JSON.stringify({ files }) });
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
   }
 }
 

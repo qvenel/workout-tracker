@@ -75,7 +75,7 @@ export function StepCard({ step, nth, actionLabel, onChange, onAction, onMenu, o
 
       <div class={`minis ${minis.length > 1 ? 'two' : ''}`}>{minis}</div>
 
-      <button type="button" class="primary" onClick={onAction}>
+      <button type="button" class="primary" disabled={step.value == null} onClick={onAction}>
         {actionLabel}
       </button>
     </section>

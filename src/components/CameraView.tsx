@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { useBackClose } from '../lib/back';
 import { clock, fr } from '../lib/format';
 import { Back, Close } from './Icons';
 
@@ -26,6 +27,7 @@ export function CameraView({ title, onClose }: { title: string; onClose: () => v
   const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  useBackClose(onClose);
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());

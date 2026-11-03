@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import Sortable from 'sortablejs';
 import type { Data, Exercise } from '../lib/data';
+import { useBackGuard } from '../lib/back';
 import { alertRestOver, beepMark } from '../lib/device';
 import { clock, formatSet } from '../lib/format';
 import {
@@ -11,6 +12,7 @@ import {
   propagate,
   rememberRest,
   restFor,
+  restSignal,
 } from '../lib/session';
 import { CameraView } from './CameraView';
 import { ExercisePicker } from './ExercisePicker';
@@ -41,6 +43,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const upcomingRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  useBackGuard();
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -63,15 +66,13 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   // Short beep when 30 s, 1:00, 1:30… are left; triple beep + vibration when rest is over
   useEffect(() => {
     if (!lastDone || !active || lastDone.restSkipped || lastDone.restAlerted || !lastDone.restSec) return;
-    if (restLeft <= 0) {
+    const signal = restSignal(lastDone.restSec, restLeft, lastDone.restBeepedAt);
+    if (signal?.kind === 'end') {
       alertRestOver();
       patchStep(lastDone.id, { restAlerted: true });
-      return;
-    }
-    const mark = Math.ceil(restLeft / 30) * 30;
-    if (mark < lastDone.restSec && (lastDone.restBeepedAt == null || mark < lastDone.restBeepedAt)) {
+    } else if (signal?.kind === 'mark') {
       beepMark();
-      patchStep(lastDone.id, { restBeepedAt: mark });
+      patchStep(lastDone.id, { restBeepedAt: signal.mark });
     }
   });
 
@@ -103,6 +104,9 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const validate = () => {
     if (!active) return;
     const cur = sessionRef.current.steps;
+    // a double tap must not validate two sets
+    const prev = cur.filter((s) => s.status === 'done').pop();
+    if (prev?.doneAt && Date.now() - prev.doneAt < 1000) return;
     const isLast = cur.filter((s) => s.status === 'todo').length === 1;
     const doneStep: Step = {
       ...active,
@@ -123,29 +127,31 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     patchStep(lastDone.id, { restSec });
   };
 
-  const rebuildFrom = (list: Step[], extra: Exercise[]) =>
-    list.map((s, i) => {
-      if (s.status === 'done' || s.touched) return s;
-      const fresh = makeStep(data, s.exercise, nthOfExercise(list, i), undefined, extra);
-      return { ...fresh, id: s.id };
-    });
+  /** Re-prefill only the given steps (new or replaced), from history, at their position in the session. */
+  const rebuild = (list: Step[], ids: Set<string>, extra: Exercise[]) =>
+    list.map((s, i) => (ids.has(s.id) ? { ...makeStep(data, s.exercise, nthOfExercise(list, i), undefined, extra), id: s.id } : s));
 
   const onPick = (ex: Exercise, count: number, isNew: boolean) => {
     const cur = sessionRef.current;
     const extra = isNew ? [...cur.newExercises, ex] : cur.newExercises;
     let list = cur.steps;
+    const changed = new Set<string>();
     if (picker?.mode === 'add') {
-      list = [...list, ...Array.from({ length: count }, () => makeStep(data, ex.name, 1, undefined, extra))];
+      const added = Array.from({ length: count }, () => makeStep(data, ex.name, 1, undefined, extra));
+      added.forEach((s) => changed.add(s.id));
+      list = [...list, ...added];
     } else if (picker?.mode === 'replace') {
       const target = list.find((s) => s.id === picker.stepId);
       if (target) {
         const from = list.indexOf(target);
-        list = list.map((s, i) =>
-          i >= from && s.status === 'todo' && s.exercise === target.exercise ? { ...s, exercise: ex.name, touched: false } : s,
-        );
+        list = list.map((s, i) => {
+          if (i < from || s.status !== 'todo' || s.exercise !== target.exercise) return s;
+          changed.add(s.id);
+          return { ...s, exercise: ex.name };
+        });
       }
     }
-    onChange({ ...cur, newExercises: extra, steps: rebuildFrom(list, extra) });
+    onChange({ ...cur, newExercises: extra, steps: rebuild(list, changed, extra) });
     setPicker(null);
   };
 
@@ -174,7 +180,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         {done.length > 2 && (
           <button type="button" class="collapsed" onClick={() => setShowAllDone(!showAllDone)}>
             <span class="ok"><Check /></span>
-            <span class="grow">{showAllDone ? 'Masquer les séries faites' : hiddenCount > 1 ? `${hiddenCount} séries faites` : '1 série faite'}</span>
+            <span class="grow">{showAllDone ? 'Masquer les séries faites' : plural(hiddenCount, 'série faite', 'séries faites')}</span>
             <Chevron up={showAllDone} />
           </button>
         )}
@@ -186,7 +192,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
               <button type="button" class="done-row" onClick={() => setEditing(s.id)}>
                 <span class="ok"><Check /></span>
                 <span class="grow">{s.exercise}</span>
-                <span class="val">{formatSet(s, s.unit)}</span>
+                <span class="val">{formatSet(shown(s), s.unit)}</span>
               </button>
               {!isLastDone && i < visibleDone.length && s.restSec && !s.restSkipped && (
                 <div class="rest-line"><Timer size={14} /> Repos {clock(s.restSec)}</div>
@@ -224,6 +230,13 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
           />
         )}
 
+        {!active && (
+          <div class="all-done">
+            <strong>Plus rien au programme.</strong>
+            <span>Ajoute un exo ou termine la séance.</span>
+          </div>
+        )}
+
         <div ref={upcomingRef} class="upcoming">
           {upcoming.map((s) => {
             const idx = steps.indexOf(s);
@@ -232,7 +245,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
                 <span class="handle" aria-label="Déplacer"><Handle /></span>
                 <div class="grow">
                   <span class="up-name">{s.exercise}</span>
-                  <span class="up-sub">Série {nthOfExercise(steps, idx)} · {formatSet(s.last, s.unit)}</span>
+                  <span class="up-sub">Série {nthOfExercise(steps, idx)} · {formatSet(shown(s), s.unit)}</span>
                 </div>
                 <button type="button" class="icon-btn" aria-label={`Options de ${s.exercise}`} onClick={() => setMenuFor(s.id)}>
                   <More size={20} />
@@ -316,9 +329,10 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
       )}
 
       {finishing && (
-        <Sheet title="Terminer la séance" onClose={() => setFinishing(false)}>
+        <Sheet title="Terminer la séance" onClose={() => { setFinishing(false); setDiscardArmed(false); }}>
           <p class="hint">
-            {done.length} séries faites en {clock(elapsed)}.{todo.length ? ` ${todo.length} séries non faites seront ignorées.` : ''}
+            {plural(done.length, 'série faite', 'séries faites')} en {clock(elapsed)}.
+            {todo.length ? ` ${plural(todo.length, 'série non faite sera ignorée', 'séries non faites seront ignorées')}.` : ''}
           </p>
           <label class="field">
             Commentaire (optionnel)
@@ -333,3 +347,13 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     </div>
   );
 }
+
+const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+
+/** Values as they will be saved: hidden fields don't count. */
+const shown = (s: Step) => ({
+  ...s,
+  weight: s.fields.weight ? s.weight : null,
+  rings: s.fields.rings ? s.rings : null,
+  bands: s.fields.bands ? s.bands : null,
+});

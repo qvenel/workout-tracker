@@ -35,7 +35,7 @@ export function Stepper({ label, value, step, suffix, size, muted, onChange }: P
       inputMode="decimal"
       aria-label={label}
       value={text}
-      placeholder={muted ? '0' : '–'}
+      placeholder={muted || size === 'small' ? '0' : '–'}
       onFocus={(e) => {
         setEditing(true);
         (e.currentTarget as HTMLInputElement).select();
