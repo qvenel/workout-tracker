@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import Sortable from 'sortablejs';
 import type { Data, Exercise } from '../lib/data';
 import { useBackGuard } from '../lib/back';
-import { alertRestOver, beepMark } from '../lib/device';
+import { alertRestOver, beepCount, beepMark, beepTen } from '../lib/device';
 import { clock, formatSet } from '../lib/format';
 import { useFlip } from '../lib/motion';
 import {
@@ -37,7 +37,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const [editing, setEditing] = useState<string | null>(null);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [finishing, setFinishing] = useState(false);
-  const [camera, setCamera] = useState(false);
+  const [camera, setCamera] = useState<{ stepId: string } | null>(null);
   const [comment, setComment] = useState('');
   const [discardArmed, setDiscardArmed] = useState(false);
   const upcomingRef = useRef<HTMLDivElement>(null);
@@ -47,6 +47,14 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const sessionRef = useRef(session);
   sessionRef.current = session;
   useBackGuard();
+  const [compact, setCompact] = useState(false);
+  const headRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const onScroll = () => setCompact(window.scrollY > (headRef.current?.offsetHeight ?? 100) - 20);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -77,9 +85,9 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     const signal = restSignal(lastDone.restSec, restLeft, lastDone.restBeepedAt);
     if (signal?.kind === 'end') {
       alertRestOver();
-      patchStep(lastDone.id, { restAlerted: true });
-    } else if (signal?.kind === 'mark') {
-      beepMark();
+      patchStep(lastDone.id, { restAlerted: true, restTaken: lastDone.restTaken ?? lastDone.restSec });
+    } else if (signal) {
+      play(signal.kind);
       patchStep(lastDone.id, { restBeepedAt: signal.mark });
     }
   });
@@ -91,11 +99,32 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     if (signal?.kind === 'end') {
       alertRestOver();
       setWarmup({ alerted: true });
-    } else if (signal?.kind === 'mark') {
-      beepMark();
+    } else if (signal) {
+      play(signal.kind);
       setWarmup({ beepedAt: signal.mark });
     }
   });
+
+  // Keep the action at the top of the screen: rest (or warm-up), then the current set, then what's next.
+  const focusKey = `${lastDone?.id ?? 'start'}|${camera ? 'cam' : ''}`;
+  const firstFocus = useRef(true);
+  useEffect(() => {
+    if (camera) return;
+    const root = timelineRef.current;
+    if (!root) return;
+    const target =
+      root.querySelector<HTMLElement>('.rest') ?? root.querySelector<HTMLElement>('.card') ?? root.querySelector<HTMLElement>('.all-done');
+    if (!target) return;
+    const first = firstFocus.current;
+    firstFocus.current = false;
+    // after the FLIP frame, so layout is final
+    requestAnimationFrame(() => {
+      const y = root.getBoundingClientRect().top + target.offsetTop; // position in the viewport
+      // only move when the step sits low on screen or hides under the bar
+      if (y > HEADER_COMPACT + 8 && y < window.innerHeight * 0.35) return;
+      window.scrollTo({ top: Math.max(0, window.scrollY + y - HEADER_COMPACT - 8), behavior: first ? 'auto' : 'smooth' });
+    });
+  }, [focusKey]);
 
   // Drag & drop on upcoming sets
   useEffect(() => {
@@ -123,24 +152,36 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     return () => sortable.destroy();
   }, [upcoming.length > 0]);
 
-  const validate = () => {
-    if (!active) return;
+  const validate = (): boolean => {
     const cur = sessionRef.current.steps;
+    const current = cur.find((s) => s.status === 'todo');
+    if (!current) return false;
     // a double tap must not validate two sets
     const prev = cur.filter((s) => s.status === 'done').pop();
-    if (prev?.doneAt && Date.now() - prev.doneAt < 1000) return;
+    const t = Date.now();
+    if (prev?.doneAt && t - prev.doneAt < 1000) return false;
     const isLast = cur.filter((s) => s.status === 'todo').length === 1;
     const doneStep: Step = {
-      ...active,
+      ...current,
       status: 'done',
       touched: true,
-      doneAt: Date.now(),
+      doneAt: t,
       restSec: restFor(),
       restSkipped: isLast,
       restAlerted: false,
     };
-    setSteps(propagate(cur.map((s) => (s.id === active.id ? doneStep : s)), doneStep));
+    const next = cur.map((s) => {
+      if (s.id === current.id) return doneStep;
+      // validating during a rest ends it: keep how long it actually lasted
+      if (prev && s.id === prev.id && prev.restTaken == null && !prev.restSkipped && prev.doneAt && prev.restSec)
+        return { ...s, restTaken: Math.min(prev.restSec, (t - prev.doneAt) / 1000) };
+      return s;
+    });
+    setSteps(propagate(next, doneStep));
+    return true;
   };
+
+  const skipRest = () => lastDone?.doneAt && patchStep(lastDone.id, { restSkipped: true, restTaken: (Date.now() - lastDone.doneAt) / 1000 });
 
   const adjustRest = (delta: number) => {
     if (!lastDone?.restSec) return;
@@ -182,12 +223,37 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const visibleDone = showAllDone ? done : done.slice(-2);
   const hiddenCount = done.length - visibleDone.length;
 
-  if (camera) return <CameraView title={active ? `${active.exercise} · série ${nthOfExercise(steps, steps.indexOf(active))}` : ''} onClose={() => setCamera(false)} />;
+  const camStep = camera && steps.find((s) => s.id === camera.stepId);
+  if (camera && camStep) {
+    const camRest = camStep.status === 'done' && camStep.id === lastDone?.id && resting ? { left: restLeft, total: camStep.restSec ?? 1 } : null;
+    return (
+      <CameraView
+        title={`${camStep.exercise} · série ${nthOfExercise(steps, steps.indexOf(camStep))}`}
+        unit={camStep.unit}
+        value={camStep.value}
+        recorded={camStep.status === 'done'}
+        rest={camRest}
+        onStop={validate}
+        onValue={(value) => patchStep(camStep.id, { value, touched: true })}
+        onSkipRest={skipRest}
+        onClose={() => setCamera(null)}
+      />
+    );
+  }
 
   return (
     <div class="screen">
-      <header class="session-head">
-        <div>
+      <div class="bar-anchor" aria-hidden={!compact}>
+        <div class={`top-bar ${compact ? 'on' : ''}`}>
+          <span class="top-name">{session.name}</span>
+          <span class="chrono small">
+            <Timer size={16} />
+            {clock(elapsed)}
+          </span>
+        </div>
+      </div>
+      <header class="session-head" ref={headRef}>
+        <div class="head-text">
           <span class="date">{new Date(session.startedAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           <h1>{session.name}</h1>
         </div>
@@ -222,7 +288,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
           <div class="rest-line" data-flip="warmup-line"><Timer size={14} /> Échauffement</div>
         )}
 
-        {visibleDone.map((s, i) => {
+        {visibleDone.map((s) => {
           const isLastDone = s.id === lastDone?.id;
           return (
             <div key={s.id} data-flip={s.id}>
@@ -231,11 +297,8 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
                 <span class="grow">{s.exercise}</span>
                 <span class="val">{formatSet(shown(s), s.unit)}</span>
               </button>
-              {!isLastDone && i < visibleDone.length && s.restSec && !s.restSkipped && (
-                <div class="rest-line"><Timer size={14} /> Repos {clock(s.restSec)}</div>
-              )}
-              {isLastDone && !resting && active && s.restSec && !s.restSkipped && (
-                <div class="rest-line"><Timer size={14} /> Repos {clock(s.restSec)}</div>
+              {s.restTaken != null && !(isLastDone && resting) && (
+                <div class="rest-line"><Timer size={14} /> Repos {clock(s.restTaken)}</div>
               )}
             </div>
           );
@@ -249,7 +312,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
             </div>
             <button type="button" class="rest-btn" onClick={() => adjustRest(-15)}>−15</button>
             <button type="button" class="rest-btn" onClick={() => adjustRest(15)}>+15</button>
-            <button type="button" class="rest-btn solid" onClick={() => patchStep(lastDone.id, { restSkipped: true })}>Passer</button>
+            <button type="button" class="rest-btn solid" onClick={skipRest}>Passer</button>
             <div class="rest-bar" style={{ width: `${Math.min(100, (1 - restLeft / (lastDone.restSec ?? 1)) * 100)}%` }} />
           </section>
         )}
@@ -264,7 +327,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
             onChange={(p) => patchStep(active.id, p)}
             onAction={validate}
             onMenu={() => setMenuFor(active.id)}
-            onCamera={() => setCamera(true)}
+            onCamera={() => setCamera({ stepId: active.id })}
           />
         )}
 
@@ -386,6 +449,9 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   );
 }
 
+/** height of the sticky header once the page has scrolled */
+const HEADER_COMPACT = 56;
+
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
 /** Values as they will be saved: hidden fields don't count. */
@@ -395,3 +461,9 @@ const shown = (s: Step) => ({
   rings: s.fields.rings ? s.rings : null,
   bands: s.fields.bands ? s.bands : null,
 });
+
+function play(kind: 'mark' | 'ten' | 'count') {
+  if (kind === 'count') beepCount();
+  else if (kind === 'ten') beepTen();
+  else beepMark();
+}

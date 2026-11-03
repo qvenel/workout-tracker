@@ -308,3 +308,53 @@ button:not(:disabled):active { transform: scale(0.96); }
 }
 
 .rest.warmup .rest-label { letter-spacing: 0.4px; font-size: 11px; white-space: nowrap; }
+
+/* ---------- sticky session bar ---------- */
+/* zero-height sticky anchor: the bar overlays the page, so showing it never shifts the content */
+.bar-anchor { position: sticky; top: 0; height: 0; z-index: 6; }
+.top-bar {
+  position: absolute; left: 0; right: 0; top: 0; height: 56px; padding: env(safe-area-inset-top) 16px 0 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: rgba(244, 245, 243, 0.94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 1px 0 var(--line), 0 6px 16px rgba(18, 22, 20, 0.06);
+  transform: translateY(-100%); opacity: 0; pointer-events: none;
+  transition: transform 0.25s var(--ease), opacity 0.2s var(--ease);
+}
+.top-bar.on { transform: none; opacity: 1; pointer-events: auto; }
+.top-name { font-family: var(--cond); font-size: 26px; font-weight: 700; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chrono.small { padding: 5px 10px; font-size: 19px; }
+/* room at the end so the current step can always reach the top of the screen */
+.timeline { padding-bottom: 50dvh; scroll-margin-top: 70px; }
+
+/* ---------- camera v2 ---------- */
+.mirror { transform: scaleX(-1); }
+.cam-head { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; }
+.cam-title { font-size: 16px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cam-rest {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; padding: 6px 6px 8px 12px;
+  border-radius: 14px; background: var(--dark-2);
+}
+.cam-rest-label { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #fb923c; }
+.cam-rest-time { font-family: var(--cond); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cam-rest-time.ending { animation: pulse 1s ease-in-out infinite; }
+.cam-rest-skip { height: 36px; padding: 0 10px; border-radius: 10px; background: var(--dark-text); color: var(--ink); font-weight: 700; font-size: 14px; }
+.cam-rest .rest-bar { height: 3px; }
+.cam-rest-done { font-size: 14px; font-weight: 600; color: var(--dark-muted); }
+.review { gap: 18px; }
+.scrub-row { display: flex; align-items: center; gap: 12px; }
+.scrub-row input { flex: 1; }
+.scrub-time { width: 4.5ch; text-align: right; font-size: 15px; color: var(--dark-text); font-variant-numeric: tabular-nums; }
+.round.small { width: 48px; height: 48px; border-radius: 24px; border: none; background: var(--dark-text); color: #0d100f; flex-shrink: 0; }
+.cam-tools { padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; }
+.stopwatch {
+  border-radius: 18px; background: var(--dark-2); border: 1.5px solid var(--dark-line); color: var(--dark-text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 12px;
+}
+.stopwatch.running { background: #f97316; border-color: #f97316; color: #0d100f; }
+.sw-label { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
+.sw-time { font-family: var(--cond); font-size: 44px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.cam-counter .tile { background: var(--dark-2); color: var(--dark-text); height: 100%; justify-content: center; }
+.cam-counter .tile-label, .cam-counter .suffix { color: var(--dark-muted); }
+.cam-counter .num { color: var(--dark-text); }
+.cam-counter .num:focus { background: #2a302d; }
+.cam-counter .pm { background: #2a302d; color: var(--dark-text); }

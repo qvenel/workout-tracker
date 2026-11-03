@@ -35,6 +35,13 @@ export function parseCsv(text: string): Record<string, string>[] {
   return body.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
 }
 
+/** Column names of a CSV text (first line), or null if empty. */
+export function csvHeader(text: string | null): string[] | null {
+  if (!text || !text.trim()) return null;
+  const firstLine = text.slice(0, text.indexOf('\n') === -1 ? undefined : text.indexOf('\n')).replace(/\r$/, '');
+  return firstLine.split(',').map((h) => h.replace(/^"|"$/g, ''));
+}
+
 function cell(v: string): string {
   return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }

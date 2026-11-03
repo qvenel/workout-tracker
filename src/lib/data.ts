@@ -1,4 +1,4 @@
-import { appendCsv, parseCsv } from './csv';
+import { appendCsv, csvHeader, parseCsv } from './csv';
 import type { DataSource } from './source';
 import { load, save } from './storage';
 
@@ -132,6 +132,8 @@ export async function fetchData(src: DataSource): Promise<Data> {
 
 export interface FinishedSet extends SetValues {
   exercise: string;
+  /** rest actually taken after the set, seconds */
+  restSec?: number | null;
 }
 
 export interface FinishedSession {
@@ -154,6 +156,8 @@ export function slug(s: string) {
     .replace(/^-|-$/g, '');
 }
 
+const SET_COLUMNS = ['session_id', 'exercise', 'set', 'value', 'rings_level', 'weight_kg', 'bands', 'bad_form', 'note', 'rest_sec'];
+
 export async function saveSession(src: DataSource, s: FinishedSession): Promise<string> {
   let sessionId = '';
   const year = s.date.slice(0, 4);
@@ -174,11 +178,24 @@ export async function saveSession(src: DataSource, s: FinishedSession): Promise<
       path: `sets/${year}.csv`,
       update: (cur: string | null) => {
         const count: Record<string, number> = {};
+        // write in the file's own column order, whatever it is
+        const header = csvHeader(cur) ?? SET_COLUMNS;
         const rows = s.sets.map((x) => {
           count[x.exercise] = (count[x.exercise] ?? 0) + 1;
-          return [sessionId, x.exercise, String(count[x.exercise]), fmt(x.value), fmt(x.rings), fmt(x.weight), fmt(x.bands), fmt(x.badForm), ''];
+          const v: Record<string, string> = {
+            session_id: sessionId,
+            exercise: x.exercise,
+            set: String(count[x.exercise]),
+            value: fmt(x.value),
+            rings_level: fmt(x.rings),
+            weight_kg: fmt(x.weight),
+            bands: fmt(x.bands),
+            bad_form: fmt(x.badForm),
+            rest_sec: fmt(x.restSec ?? null),
+          };
+          return header.map((h) => v[h] ?? '');
         });
-        return appendCsv(cur, ['session_id', 'exercise', 'set', 'value', 'rings_level', 'weight_kg', 'bands', 'bad_form', 'note'], rows);
+        return appendCsv(cur, header, rows);
       },
     },
   ];

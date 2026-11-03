@@ -18,8 +18,10 @@ export interface Step extends SetValues {
   restSec?: number;
   restSkipped?: boolean;
   restAlerted?: boolean;
-  /** smallest "time left" mark (multiple of 30 s) already announced */
+  /** smallest "time left" mark already announced */
   restBeepedAt?: number;
+  /** rest actually taken, seconds (set when skipped, over, or the next set is validated) */
+  restTaken?: number;
 }
 
 export interface Warmup {
@@ -43,7 +45,7 @@ export interface PendingSession {
   date: string;
   durationMin: number;
   comment: string;
-  sets: (SetValues & { exercise: string })[];
+  sets: (SetValues & { exercise: string; restSec?: number | null })[];
   newExercises: Exercise[];
   error?: string;
 }
@@ -144,7 +146,7 @@ export function propagate(steps: Step[], from: Step): Step[] {
   });
 }
 
-export type RestSignal = { kind: 'end' } | { kind: 'mark'; mark: number } | null;
+export type RestSignal = { kind: 'end' } | { kind: 'mark' | 'ten' | 'count'; mark: number } | null;
 
 /**
  * What to play now during a rest: a short beep each time 30 s, 1:00, 1:30… are left
@@ -152,9 +154,10 @@ export type RestSignal = { kind: 'end' } | { kind: 'mark'; mark: number } | null
  */
 export function restSignal(restSec: number, left: number, beepedAt: number | undefined, every = 30): RestSignal {
   if (left <= 0) return { kind: 'end' };
-  const mark = Math.ceil(left / every) * every;
-  if (mark < restSec && (beepedAt == null || mark < beepedAt)) return { kind: 'mark', mark };
-  return null;
+  // the mark just crossed: smallest of 1…5 s, 10 s and the regular marks that is still ≥ time left
+  const mark = Math.min(...[1, 2, 3, 4, 5, 10, Math.ceil(left / every) * every].filter((m) => m >= left));
+  if (mark >= restSec || (beepedAt != null && mark >= beepedAt)) return null;
+  return { kind: mark <= 5 ? 'count' : mark === 10 ? 'ten' : 'mark', mark };
 }
 
 export function toPending(s: ActiveSession, comment: string, now = Date.now()): PendingSession {
@@ -174,6 +177,7 @@ export function toPending(s: ActiveSession, comment: string, now = Date.now()): 
         rings: x.fields.rings ? x.rings : null,
         bands: x.fields.bands ? x.bands : null,
         badForm: x.badForm || null,
+        restSec: x.restTaken != null ? Math.round(x.restTaken) : null,
       })),
     newExercises: s.newExercises,
   };

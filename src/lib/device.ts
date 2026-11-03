@@ -46,6 +46,22 @@ export function beepMark() {
   tone(880, 0);
 }
 
+/** Double beep: 10 s left. */
+export function beepTen() {
+  try {
+    navigator.vibrate?.([80, 60, 80]);
+  } catch {
+    /* ignore */
+  }
+  tone(988, 0, 0.12);
+  tone(988, 0.18, 0.12);
+}
+
+/** Short high tick: each of the last 5 seconds. */
+export function beepCount() {
+  tone(1175, 0, 0.08);
+}
+
 export function alertRestOver() {
   try {
     navigator.vibrate?.([300, 150, 300]);
