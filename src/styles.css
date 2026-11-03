@@ -246,3 +246,63 @@ h1 { margin: 2px 0 0; font-family: var(--cond); font-size: 44px; line-height: 1;
 
 .all-done { display: flex; flex-direction: column; gap: 2px; padding: 16px; border-radius: 18px; background: var(--card); color: var(--muted); }
 .all-done strong { color: var(--ink); font-size: 17px; }
+
+/* ---------- motion ---------- */
+:root { --ease: cubic-bezier(0.2, 0.8, 0.2, 1); --spring: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+.timeline { position: relative; }
+
+/* every tappable thing gives way under the finger */
+button {
+  transition: transform 0.14s var(--ease), background-color 0.2s var(--ease), color 0.2s var(--ease),
+    opacity 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+button:not(:disabled):active { transform: scale(0.96); }
+.primary:not(:disabled):active, .finish:active, .light:active { transform: scale(0.98); }
+.done-row:active, .up-row:active, .result:active, .menu button:active, .collapsed:active { transform: scale(0.985); }
+.pm:not(:disabled):active { transform: scale(0.9); background: var(--chip); }
+.scrim:active { transform: none; }
+
+/* screens and content slide in */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.screen > header, .screen > main, .screen > footer { animation: rise 0.32s var(--ease) both; }
+.screen > main { animation-delay: 0.04s; }
+.screen > footer { animation-delay: 0.08s; }
+.screen.camera, .screen.dark { animation: fade 0.25s var(--ease) both; }
+.screen.camera > *, .screen.dark > * { animation: none; }
+.swap { animation: rise 0.28s var(--ease) both; }
+.banner { animation: rise 0.3s var(--ease) both; }
+
+/* sheets */
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes sheet-down { from { transform: none; } to { transform: translateY(100%); } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+.sheet { animation: sheet-up 0.32s var(--ease) both; }
+.scrim { animation: fade 0.25s var(--ease) both; }
+.sheet-wrap.closing .sheet { animation: sheet-down 0.2s ease-in both; }
+.sheet-wrap.closing .scrim { animation: fade-out 0.2s ease-in both; }
+.sheet .card { animation: none; }
+
+/* a set just validated: its check pops */
+@keyframes pop { 0% { transform: scale(0); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.done-row.fresh .ok { animation: pop 0.45s var(--spring) both; }
+.done-row.fresh { box-shadow: 0 0 0 2px var(--green-soft); }
+
+/* rest: last 5 seconds pulse, progress glides */
+@keyframes pulse { 0%, 100% { color: var(--dark-text); } 50% { color: #fb923c; } }
+.rest-time { transition: color 0.2s; }
+.rest-time.ending { animation: pulse 1s ease-in-out infinite; }
+.rest-bar { transition: width 0.25s linear; }
+
+/* chips and chevron */
+.chip { transition: transform 0.14s var(--ease), background-color 0.25s var(--ease), color 0.25s var(--ease); }
+.chev { display: inline-flex; transition: transform 0.3s var(--ease); }
+.chev.up { transform: rotate(180deg); }
+
+/* focus on a number: subtle lift */
+.tile .num, .mini .num { transition: background-color 0.2s var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

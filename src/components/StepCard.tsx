@@ -1,4 +1,5 @@
 import type { Step } from '../lib/session';
+import { tick } from '../lib/device';
 import { formatSet } from '../lib/format';
 import { Camera, More } from './Icons';
 import { Stepper } from './Stepper';
@@ -11,9 +12,10 @@ interface Props {
   onAction: () => void;
   onMenu?: () => void;
   onCamera?: () => void;
+  flipId?: string;
 }
 
-export function StepCard({ step, nth, actionLabel, onChange, onAction, onMenu, onCamera }: Props) {
+export function StepCard({ step, nth, actionLabel, onChange, onAction, onMenu, onCamera, flipId }: Props) {
   const set = (patch: Partial<Step>) => onChange({ ...patch, touched: true });
   const secs = step.unit === 'seconds';
   const valueStep = secs ? 0.5 : 1;
@@ -36,7 +38,7 @@ export function StepCard({ step, nth, actionLabel, onChange, onAction, onMenu, o
   ].filter(Boolean);
 
   return (
-    <section class="card">
+    <section class="card" data-flip={flipId}>
       <div class="card-head">
         <div class="card-title">
           <h2>{step.exercise}</h2>
@@ -75,7 +77,7 @@ export function StepCard({ step, nth, actionLabel, onChange, onAction, onMenu, o
 
       <div class={`minis ${minis.length > 1 ? 'two' : ''}`}>{minis}</div>
 
-      <button type="button" class="primary" disabled={step.value == null} onClick={onAction}>
+      <button type="button" class="primary" disabled={step.value == null} onClick={() => { tick(); onAction(); }}>
         {actionLabel}
       </button>
     </section>

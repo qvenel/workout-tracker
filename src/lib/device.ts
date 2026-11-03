@@ -27,6 +27,15 @@ function tone(freq: number, at: number, len = 0.18) {
   osc.stop(t0 + len + 0.02);
 }
 
+/** Tiny haptic tick on taps, like native controls. */
+export function tick() {
+  try {
+    navigator.vibrate?.(8);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Short single beep: another 30 s of rest gone. */
 export function beepMark() {
   try {

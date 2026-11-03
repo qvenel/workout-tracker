@@ -59,7 +59,7 @@ export function Home(p: Props) {
         {!p.data && p.loading && <p class="hint">Chargement de l'historique…</p>}
 
         {p.data && current && (
-          <div class="list-card">
+          <div class="list-card swap" key={current}>
             {exercises.map((ex) => (
               <div class="list-row" key={ex}>
                 <span class="list-name">{ex}</span>

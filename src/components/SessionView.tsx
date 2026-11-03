@@ -4,6 +4,7 @@ import type { Data, Exercise } from '../lib/data';
 import { useBackGuard } from '../lib/back';
 import { alertRestOver, beepMark } from '../lib/device';
 import { clock, formatSet } from '../lib/format';
+import { useFlip } from '../lib/motion';
 import {
   type ActiveSession,
   type Step,
@@ -41,6 +42,9 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const [comment, setComment] = useState('');
   const [discardArmed, setDiscardArmed] = useState(false);
   const upcomingRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLElement>(null);
+  const skipFlip = useRef(false);
+  useFlip(timelineRef, skipFlip);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   useBackGuard();
@@ -86,6 +90,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
       onEnd: (evt) => {
         const { oldIndex, newIndex, item, from } = evt;
         if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
+        skipFlip.current = true; // Sortable already animated the move
         // let Preact own the DOM: undo Sortable's move, then reorder state
         from.removeChild(item);
         from.insertBefore(item, from.children[oldIndex] ?? null);
@@ -176,20 +181,20 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         </span>
       </header>
 
-      <main class="timeline">
+      <main class="timeline" ref={timelineRef}>
         {done.length > 2 && (
-          <button type="button" class="collapsed" onClick={() => setShowAllDone(!showAllDone)}>
+          <button type="button" class="collapsed" data-flip="collapsed" onClick={() => setShowAllDone(!showAllDone)}>
             <span class="ok"><Check /></span>
             <span class="grow">{showAllDone ? 'Masquer les séries faites' : plural(hiddenCount, 'série faite', 'séries faites')}</span>
-            <Chevron up={showAllDone} />
+            <span class={`chev ${showAllDone ? "up" : ""}`}><Chevron /></span>
           </button>
         )}
 
         {visibleDone.map((s, i) => {
           const isLastDone = s.id === lastDone?.id;
           return (
-            <div key={s.id}>
-              <button type="button" class="done-row" onClick={() => setEditing(s.id)}>
+            <div key={s.id} data-flip={s.id}>
+              <button type="button" class={`done-row ${s.doneAt && now - s.doneAt < 1500 ? 'fresh' : ''}`} onClick={() => setEditing(s.id)}>
                 <span class="ok"><Check /></span>
                 <span class="grow">{s.exercise}</span>
                 <span class="val">{formatSet(shown(s), s.unit)}</span>
@@ -205,10 +210,10 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         })}
 
         {resting && lastDone && (
-          <section class="rest" role="timer" aria-label="Repos en cours">
+          <section class="rest" role="timer" aria-label="Repos en cours" data-flip={`rest-${lastDone.id}`}>
             <div class="grow">
               <span class="rest-label">Repos</span>
-              <span class="rest-time">{clock(restLeft)}</span>
+              <span class={`rest-time ${restLeft <= 5 ? "ending" : ""}`}>{clock(restLeft)}</span>
             </div>
             <button type="button" class="rest-btn" onClick={() => adjustRest(-15)}>−15</button>
             <button type="button" class="rest-btn" onClick={() => adjustRest(15)}>+15</button>
@@ -220,6 +225,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         {active && (
           <StepCard
             key={active.id}
+            flipId={active.id}
             step={active}
             nth={nthOfExercise(steps, steps.indexOf(active))}
             actionLabel="Valider"
@@ -231,7 +237,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         )}
 
         {!active && (
-          <div class="all-done">
+          <div class="all-done" data-flip="all-done">
             <strong>Plus rien au programme.</strong>
             <span>Ajoute un exo ou termine la séance.</span>
           </div>
@@ -241,7 +247,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
           {upcoming.map((s) => {
             const idx = steps.indexOf(s);
             return (
-              <div class="up-row" key={s.id}>
+              <div class="up-row" key={s.id} data-flip={s.id}>
                 <span class="handle" aria-label="Déplacer"><Handle /></span>
                 <div class="grow">
                   <span class="up-name">{s.exercise}</span>
@@ -255,10 +261,10 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
           })}
         </div>
 
-        <button type="button" class="ghost" onClick={() => setPicker({ mode: 'add' })}>
+        <button type="button" class="ghost" data-flip="add" onClick={() => setPicker({ mode: 'add' })}>
           <Plus /> Ajouter un exo
         </button>
-        <button type="button" class="finish" onClick={() => setFinishing(true)}>Terminer la séance</button>
+        <button type="button" class="finish" data-flip="finish" onClick={() => setFinishing(true)}>Terminer la séance</button>
       </main>
 
       {menuStep && (
