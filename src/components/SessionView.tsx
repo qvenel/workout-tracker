@@ -11,7 +11,6 @@ import {
   makeStep,
   nthOfExercise,
   propagate,
-  rememberRest,
   restFor,
   restSignal,
 } from '../lib/session';
@@ -118,7 +117,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
       status: 'done',
       touched: true,
       doneAt: Date.now(),
-      restSec: restFor(active.exercise),
+      restSec: restFor(),
       restSkipped: isLast,
       restAlerted: false,
     };
@@ -128,7 +127,6 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const adjustRest = (delta: number) => {
     if (!lastDone?.restSec) return;
     const restSec = Math.max(15, lastDone.restSec + delta);
-    rememberRest(lastDone.exercise, restSec);
     patchStep(lastDone.id, { restSec });
   };
 

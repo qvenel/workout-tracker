@@ -9,7 +9,7 @@ Live: https://qvenel.github.io/workout-tracker/
 - Session templates (Push A, Pull A…) from `templates.json`, next one suggested
 - Timeline of sets: done sets fold up, active set card, rest timer slotted between sets, upcoming sets draggable
 - Prefill from the last session (reps / seconds, weight, rings level, band); bad-form reps on every set
-- Rest: 2:00 by default, ±15 s, remembered per exercise; beep + vibration when over
+- Rest: always starts at 2:00, ±15 s for the rest in progress; short beep at every 30 s left, triple beep + vibration when over
 - Overall session clock, screen kept awake during a session
 - Replace / add / delete exercises and sets on the fly, create new exercises
 - In-app camera: record, scrub frame by frame, discarded on exit (nothing saved)

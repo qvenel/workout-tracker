@@ -48,8 +48,8 @@ export const saveActive = (s: ActiveSession | null) => save(KEY, s);
 export const loadPending = () => load<PendingSession[]>(PENDING, []);
 export const savePending = (p: PendingSession[]) => save(PENDING, p.length ? p : null);
 
-export const restFor = (exercise: string) => load<number>(`rest:${exercise}`, DEFAULT_REST);
-export const rememberRest = (exercise: string, sec: number) => save(`rest:${exercise}`, sec);
+/** Every rest starts at the default; −15 / +15 only change the rest in progress. */
+export const restFor = () => DEFAULT_REST;
 
 let counter = 0;
 const newId = () => `${Date.now().toString(36)}-${(counter++).toString(36)}`;
