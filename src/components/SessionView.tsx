@@ -227,16 +227,18 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
 
   const camStep = camera && steps.find((s) => s.id === camera.stepId);
   if (camera && camStep) {
-    const camRest = camStep.status === 'done' && camStep.id === lastDone?.id && resting ? { left: restLeft, total: camStep.restSec ?? 1 } : null;
+    const camRest = resting && lastDone ? { left: restLeft, total: lastDone.restSec ?? 1 } : null;
     return (
       <CameraView
         title={`${camStep.exercise} · série ${nthOfExercise(steps, steps.indexOf(camStep))}`}
         unit={camStep.unit}
         value={camStep.value}
+        badForm={camStep.badForm}
         recorded={camStep.status === 'done'}
         rest={camRest}
         onStop={validate}
         onValue={(value) => patchStep(camStep.id, { value, touched: true })}
+        onBadForm={(badForm) => patchStep(camStep.id, { badForm, touched: true })}
         onSkipRest={skipRest}
         onClose={() => setCamera(null)}
       />

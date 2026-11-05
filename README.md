@@ -14,7 +14,7 @@ Live: https://qvenel.github.io/workout-tracker/
 - 5-minute warm-up countdown at the start of each session (±1 min, skip; ends by itself on the first set)
 - Overall session clock in a bar that stays on top; the page scrolls itself so rest + current set sit at the top; screen kept awake
 - Replace / add / delete exercises and sets on the fly, create new exercises
-- In-app front camera: Stop ends the set (validated, rest starts), then the clip plays with the rest on top, the set counter and a start/stop stopwatch; discarded on exit (nothing saved)
+- In-app front camera: Stop ends the set (validated, rest starts), rest left shown big while recording; the clip plays turned upright (filmed in landscape), with ±5 s, ×2, the running rest, set counter + bad form and a start/stop stopwatch; discarded on exit (nothing saved)
 - Works offline once loaded; sessions that failed to upload are kept and retried
 
 ## Setup on the phone

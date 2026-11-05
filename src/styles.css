@@ -358,3 +358,25 @@ button:not(:disabled):active { transform: scale(0.96); }
 .cam-counter .num { color: var(--dark-text); }
 .cam-counter .num:focus { background: #2a302d; }
 .cam-counter .pm { background: #2a302d; color: var(--dark-text); }
+
+/* ---------- camera v3 ---------- */
+.clip-box { position: relative; width: 100%; overflow: hidden; background: var(--dark-2); }
+.clip-box .clip { max-height: none; display: block; object-fit: contain; background: transparent; }
+.scrub { padding: 0 16px; gap: 10px; }
+.scrub input { margin: 0; }
+.transport { gap: 10px; justify-content: flex-start; }
+.round.jump { width: 52px; height: 52px; border-radius: 26px; font-weight: 700; font-size: 16px; }
+.round.play { width: 60px; height: 60px; border-radius: 30px; }
+.round.speed.on { background: #f97316; border-color: #f97316; color: #0d100f; }
+.transport .scrub-time { margin-left: auto; }
+.cam-counter { display: flex; flex-direction: column; gap: 8px; }
+.cam-counter .mini { background: var(--dark-2); }
+.cam-counter .mini-label { color: var(--dark-muted); }
+.cam-counter .mini .num { color: var(--dark-text); }
+.cam-counter .mini .pm.small { background: #2a302d; color: var(--dark-text); }
+.cam-live-rest {
+  position: absolute; top: calc(84px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; padding: 8px 22px 10px; border-radius: 20px; background: rgba(0, 0, 0, 0.55);
+}
+.cam-live-rest-time { font-family: var(--cond); font-size: 64px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.cam-live-rest-time.ending { animation: pulse 1s ease-in-out infinite; }

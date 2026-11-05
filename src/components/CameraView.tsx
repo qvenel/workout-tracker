@@ -13,6 +13,7 @@ interface Props {
   unit: Unit;
   /** value of the set being filmed (after Stop: of the set just validated) */
   value: number | null;
+  badForm: number | null;
   /** true once Stop has validated the set */
   recorded: boolean;
   /** rest running after the set, if any */
@@ -20,9 +21,13 @@ interface Props {
   /** Stop: ends the set (validates it, starts the rest) */
   onStop: () => boolean;
   onValue: (v: number | null) => void;
+  onBadForm: (v: number | null) => void;
   onSkipRest: () => void;
   onClose: () => void;
 }
+
+/** quarter turn that brings landscape footage back upright (flip the sign if it shows upside down) */
+const ROTATE = 90;
 
 function pickMime(): string | undefined {
   const candidates = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
@@ -34,7 +39,7 @@ function pickMime(): string | undefined {
  * then the clip plays with the rest running on top, the set counter and a stopwatch.
  * Nothing is saved: the clip is dropped on exit.
  */
-export function CameraView({ title, unit, value, recorded, rest, onStop, onValue, onSkipRest, onClose }: Props) {
+export function CameraView({ title, unit, value, badForm, recorded, rest, onStop, onValue, onBadForm, onSkipRest, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>('starting');
   const [error, setError] = useState('');
   const [startedAt, setStartedAt] = useState(0);
@@ -51,6 +56,9 @@ export function CameraView({ title, unit, value, recorded, rest, onStop, onValue
   const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ h: number; style: Record<string, string> }>({ h: 240, style: {} });
+  const [fast, setFast] = useState(false);
   useBackClose(onClose);
 
   const stopStream = () => {
@@ -150,6 +158,49 @@ export function CameraView({ title, unit, value, recorded, rest, onStop, onValue
     }
   };
 
+  /**
+   * Filmed with the phone turned a quarter turn counter-clockwise while the app stays portrait:
+   * the frames are portrait with the scene on its side, so playback turns them back upright,
+   * full width. Mirrored like the preview (front camera).
+   */
+  const fit = () => {
+    const v = playRef.current;
+    const b = boxRef.current;
+    if (!v || !b || !v.videoWidth) return;
+    const cw = b.clientWidth;
+    const portrait = v.videoHeight > v.videoWidth;
+    if (!portrait) {
+      const h = Math.min((cw * v.videoHeight) / v.videoWidth, window.innerHeight * 0.5);
+      setBox({ h, style: { width: '100%', height: `${h}px`, transform: 'scaleX(-1)' } });
+      return;
+    }
+    // displayed (after rotation): cw wide, cw * w / h tall; the element itself is sized before rotation
+    const shownH = (cw * v.videoWidth) / v.videoHeight;
+    setBox({
+      h: shownH,
+      style: {
+        position: 'absolute',
+        left: '50%',
+        top: '50%',
+        width: `${shownH}px`,
+        height: `${cw}px`,
+        transform: `translate(-50%, -50%) scaleX(-1) rotate(${ROTATE}deg)`,
+      },
+    });
+  };
+
+  const jump = (d: number) => {
+    tick();
+    seek(time + d);
+  };
+
+  const toggleSpeed = () => {
+    tick();
+    const next = !fast;
+    setFast(next);
+    if (playRef.current) playRef.current.playbackRate = next ? 2 : 1;
+  };
+
   const swShown = swStart != null ? Math.max(0, time - swStart) : measured;
 
   if (phase === 'review' && url) {
@@ -169,50 +220,53 @@ export function CameraView({ title, unit, value, recorded, rest, onStop, onValue
           )}
         </header>
         <main class="review">
-          <video
-            ref={playRef}
-            class="clip mirror"
-            src={url}
-            playsInline
-            muted
-            preload="auto"
-            onClick={togglePlay}
-            onTimeUpdate={(e) => setTime((e.currentTarget as HTMLVideoElement).currentTime)}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => {
-              setPlaying(false);
-              if (swStart != null) stopwatch();
-            }}
-          />
+          <div class="clip-box" ref={boxRef} style={{ height: `${box.h}px` }}>
+            <video
+              ref={playRef}
+              class="clip"
+              src={url}
+              playsInline
+              muted
+              preload="auto"
+              style={box.style}
+              onLoadedMetadata={fit}
+              onClick={togglePlay}
+              onTimeUpdate={(e) => setTime((e.currentTarget as HTMLVideoElement).currentTime)}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onEnded={() => {
+                setPlaying(false);
+                if (swStart != null) stopwatch();
+              }}
+            />
+          </div>
           <div class="scrub">
-            <div class="scrub-row">
-              <button type="button" class="round small" aria-label={playing ? 'Pause' : 'Lecture'} onClick={togglePlay}>
+            <input
+              type="range"
+              min={0}
+              max={duration || 1}
+              step={0.01}
+              value={time}
+              aria-label="Position dans la vidéo"
+              onInput={(e) => seek(Number((e.currentTarget as HTMLInputElement).value))}
+            />
+            <div class="transport">
+              <button type="button" class="round jump" aria-label="Reculer de 5 secondes" onClick={() => jump(-5)}>−5</button>
+              <button type="button" class="round play" aria-label={playing ? 'Pause' : 'Lecture'} onClick={togglePlay}>
                 {playing ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
                 ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" /></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" /></svg>
                 )}
               </button>
-              <input
-                type="range"
-                min={0}
-                max={duration || 1}
-                step={0.01}
-                value={time}
-                aria-label="Position dans la vidéo"
-                onInput={(e) => seek(Number((e.currentTarget as HTMLInputElement).value))}
-              />
+              <button type="button" class="round jump" aria-label="Avancer de 5 secondes" onClick={() => jump(5)}>+5</button>
+              <button type="button" class={`round jump speed ${fast ? 'on' : ''}`} aria-label="Vitesse double" aria-pressed={fast} onClick={toggleSpeed}>×2</button>
               <span class="scrub-time">{fr(Math.round(time * 10) / 10)} s</span>
             </div>
           </div>
 
           <div class="cam-tools">
-            <button type="button" class={`stopwatch ${swStart != null ? 'running' : ''}`} onClick={stopwatch}>
-              <span class="sw-label">{swStart != null ? 'Stop' : measured != null ? 'Recommencer' : 'Chrono'}</span>
-              <span class="sw-time">{swShown != null ? `${fr(Math.round(swShown * 10) / 10)} s` : '–'}</span>
-            </button>
-            {recorded && (
+            {recorded ? (
               <div class="cam-counter">
                 <Stepper
                   size="big"
@@ -222,8 +276,15 @@ export function CameraView({ title, unit, value, recorded, rest, onStop, onValue
                   suffix={unit === 'seconds' ? 's' : undefined}
                   onChange={onValue}
                 />
+                <Stepper size="small" label="Mauvaise forme" value={badForm} step={unit === 'seconds' ? 0.5 : 1} muted onChange={onBadForm} />
               </div>
+            ) : (
+              <div />
             )}
+            <button type="button" class={`stopwatch ${swStart != null ? 'running' : ''}`} onClick={stopwatch}>
+              <span class="sw-label">{swStart != null ? 'Stop' : measured != null ? 'Recommencer' : 'Chrono'}</span>
+              <span class="sw-time">{swShown != null ? `${fr(Math.round(swShown * 10) / 10)} s` : '–'}</span>
+            </button>
           </div>
         </main>
         <footer class="cam-foot">
@@ -248,6 +309,12 @@ export function CameraView({ title, unit, value, recorded, rest, onStop, onValue
         )}
         <span style={{ width: '48px' }} />
       </header>
+      {phase === 'recording' && rest && (
+        <div class="cam-live-rest" role="timer" aria-label="Repos restant">
+          <span class="cam-rest-label">Repos</span>
+          <span class={`cam-live-rest-time ${rest.left <= 5 ? 'ending' : ''}`}>{clock(rest.left)}</span>
+        </div>
+      )}
       {phase === 'error' && <p class="cam-error">{error}</p>}
       {phase === 'recording' && (
         <footer class="cam-overlay-bottom">
