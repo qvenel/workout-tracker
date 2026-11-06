@@ -13,13 +13,14 @@ export const reducedMotion = () =>
  * - a new element fades / rises in.
  * Positions use offsetTop, so scrolling and running animations don't count as moves.
  */
-export function useFlip(root: RefObject<HTMLElement>, skip?: { current: boolean }) {
+export function useFlip(root: RefObject<HTMLElement>, skip?: { current: boolean }, pause?: { current: boolean }) {
   const prev = useRef(new Map<string, { top: number; el: HTMLElement }>());
   const first = useRef(true);
   useLayoutEffect(() => {
     const container = root.current;
     if (!container) return;
     const next = new Map<string, { top: number; el: HTMLElement }>();
+    if (pause?.current) return; // a drag is moving the DOM: measure again once it is over
     const animate = !first.current && !skip?.current && !reducedMotion();
     container.querySelectorAll<HTMLElement>('[data-flip]').forEach((el) => {
       const id = el.dataset.flip!;

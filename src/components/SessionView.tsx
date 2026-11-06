@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import Sortable from 'sortablejs';
 import type { Data, Exercise } from '../lib/data';
 import { useBackGuard } from '../lib/back';
-import { alertRestOver, beepCount, beepMark, beepTen } from '../lib/device';
+import { alertRestOver, beepCount, beepMark, beepTen, tick } from '../lib/device';
 import { clock, formatSet } from '../lib/format';
 import { useFlip } from '../lib/motion';
 import {
@@ -14,6 +14,7 @@ import {
   restFor,
   restSignal,
   templateChange,
+  unitOf,
 } from '../lib/session';
 import { CameraView } from './CameraView';
 import { ExercisePicker } from './ExercisePicker';
@@ -29,7 +30,9 @@ interface Props {
   onDiscard: () => void;
 }
 
-type Picker = { mode: 'add' } | { mode: 'replace'; stepId: string; scope: 'one' | 'rest' };
+type Picker =
+  | { mode: 'add'; anchorId?: string; where?: 'before' | 'after' }
+  | { mode: 'replace'; stepId: string; scope: 'one' | 'rest' };
 
 export function SessionView({ data, session, onChange, onFinish, onDiscard }: Props) {
   const [now, setNow] = useState(Date.now());
@@ -45,7 +48,8 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const upcomingRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLElement>(null);
   const skipFlip = useRef(false);
-  useFlip(timelineRef, skipFlip);
+  const dragging = useRef(false);
+  useFlip(timelineRef, skipFlip, dragging);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   useBackGuard();
@@ -59,7 +63,8 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   }, []);
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
+    // no re-render while a set is being dragged: it would fight the drag over the DOM
+    const t = setInterval(() => !dragging.current && setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
 
@@ -130,14 +135,30 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     });
   }, [focusKey]);
 
-  // Drag & drop on upcoming sets
-  useEffect(() => {
-    const el = upcomingRef.current;
+  // Drag & drop on upcoming sets. Bound through a ref callback so it follows the list element:
+  // the list is rebuilt after the camera screen, and a binding made once on mount went dead.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const sortableRef = useRef<Sortable | null>(null);
+  // stable callback: an inline ref would re-bind on every render (4 per second with the clocks)
+  const attachUpcoming = useCallback((el: HTMLDivElement | null) => {
+    upcomingRef.current = el;
+    sortableRef.current?.destroy();
+    sortableRef.current = null;
     if (!el) return;
-    const sortable = Sortable.create(el, {
+    sortableRef.current = Sortable.create(el, {
       handle: '.handle',
       animation: 150,
+      forceFallback: true, // same pointer-driven drag on touch and mouse
+      fallbackTolerance: 4,
+      scroll: true,
+      bubbleScroll: true,
+      onStart: () => {
+        dragging.current = true;
+        tick();
+      },
       onEnd: (evt) => {
+        dragging.current = false;
         const { oldIndex, newIndex, item, from } = evt;
         if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
         skipFlip.current = true; // Sortable already animated the move
@@ -150,11 +171,10 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         const [head, ...rest] = t;
         const [moved] = rest.splice(oldIndex, 1);
         rest.splice(newIndex, 0, moved);
-        onChange({ ...sessionRef.current, steps: [...d, head, ...rest] });
+        onChangeRef.current({ ...sessionRef.current, steps: [...d, head, ...rest] });
       },
     });
-    return () => sortable.destroy();
-  }, [upcoming.length > 0]);
+  }, []);
 
   const validate = (): boolean => {
     const cur = sessionRef.current.steps;
@@ -205,10 +225,17 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     if (picker?.mode === 'add') {
       const added = Array.from({ length: count }, () => makeStep(data, ex.name, 1, undefined, extra));
       added.forEach((s) => changed.add(s.id));
-      list = [...list, ...added];
+      const at = picker.anchorId ? list.findIndex((s) => s.id === picker.anchorId) : -1;
+      list =
+        at < 0
+          ? [...list, ...added]
+          : [...list.slice(0, picker.where === 'before' ? at : at + 1), ...added, ...list.slice(picker.where === 'before' ? at : at + 1)];
     } else if (picker?.mode === 'replace') {
       const target = list.find((s) => s.id === picker.stepId);
-      if (target) {
+      if (target?.status === 'done') {
+        // fixing a set already done under the wrong exercise: keep what was logged
+        list = list.map((s) => (s.id === target.id ? { ...s, exercise: ex.name, unit: unitOf(data, ex.name, extra) } : s));
+      } else if (target) {
         const from = list.indexOf(target);
         list = list.map((s, i) => {
           if (picker.scope === 'one' ? s.id !== target.id : i < from || s.status !== 'todo' || s.exercise !== target.exercise) return s;
@@ -345,7 +372,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
           </div>
         )}
 
-        <div ref={upcomingRef} class="upcoming">
+        <div ref={attachUpcoming} class="upcoming">
           {upcoming.map((s) => {
             const idx = steps.indexOf(s);
             return (
@@ -394,6 +421,12 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
               setSteps([...cur.slice(0, i + 1), copy, ...cur.slice(i + 1)]);
               setMenuFor(null);
             }}>Ajouter une série</button>
+            <button type="button" onClick={() => { setPicker({ mode: 'add', anchorId: menuStep.id, where: 'before' }); setMenuFor(null); }}>
+              Ajouter un exo avant
+            </button>
+            <button type="button" onClick={() => { setPicker({ mode: 'add', anchorId: menuStep.id, where: 'after' }); setMenuFor(null); }}>
+              Ajouter un exo après
+            </button>
             {(['weight', 'rings', 'bands'] as const).map((f) => (
               <button type="button" key={f} onClick={() => {
                 patchStep(menuStep.id, { fields: { ...menuStep.fields, [f]: !menuStep.fields[f] } });
@@ -422,6 +455,9 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
             onChange={(p) => patchStep(editStep.id, p)}
             onAction={() => setEditing(null)}
           />
+          <button type="button" class="link" onClick={() => { setPicker({ mode: 'replace', stepId: editStep.id, scope: 'one' }); setEditing(null); }}>
+            Remplacer l'exo
+          </button>
           <button type="button" class="link danger" onClick={() => { setSteps(steps.filter((s) => s.id !== editStep.id)); setEditing(null); }}>
             Supprimer cette série
           </button>
@@ -432,7 +468,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         <ExercisePicker
           data={data}
           extra={session.newExercises}
-          title={picker.mode === 'add' ? 'Ajouter un exo' : picker.scope === 'one' ? 'Remplacer cette série par' : 'Remplacer l’exo par'}
+          title={picker.mode === 'add' ? (picker.where === 'before' ? 'Ajouter un exo avant' : picker.where === 'after' ? 'Ajouter un exo après' : 'Ajouter un exo') : picker.scope === 'one' ? 'Remplacer cette série par' : 'Remplacer l’exo par'}
           withCount={picker.mode === 'add'}
           onPick={onPick}
           onClose={() => setPicker(null)}
