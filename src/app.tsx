@@ -124,8 +124,8 @@ export function App() {
         session={active}
         onChange={updateActive}
         onDiscard={() => updateActive(null)}
-        onFinish={(comment) => {
-          const p = toPending(active, comment);
+        onFinish={(comment, templateUpdate) => {
+          const p = { ...toPending(active, comment), ...(templateUpdate ? { templateUpdate } : {}) };
           const queue = [...pending, p];
           setPending(queue);
           savePending(queue);

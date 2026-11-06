@@ -47,6 +47,7 @@ export interface PendingSession {
   comment: string;
   sets: (SetValues & { exercise: string; restSec?: number | null })[];
   newExercises: Exercise[];
+  templateUpdate?: string[];
   error?: string;
 }
 
@@ -158,6 +159,15 @@ export function restSignal(restSec: number, left: number, beepedAt: number | und
   const mark = Math.min(...[1, 2, 3, 4, 5, 10, Math.ceil(left / every) * every].filter((m) => m >= left));
   if (mark >= restSec || (beepedAt != null && mark >= beepedAt)) return null;
   return { kind: mark <= 5 ? 'count' : mark === 10 ? 'ten' : 'mark', mark };
+}
+
+/** Exercises of the session as it stands (done + still planned), if it differs from its session type. */
+export function templateChange(data: Data, s: ActiveSession): string[] | null {
+  const tpl = data.templates[s.name];
+  if (!tpl) return null;
+  const now = s.steps.map((x) => x.exercise);
+  const before = tpl.map((x) => x.exercise);
+  return now.length && now.join('\u0000') !== before.join('\u0000') ? now : null;
 }
 
 export function toPending(s: ActiveSession, comment: string, now = Date.now()): PendingSession {

@@ -143,6 +143,8 @@ export interface FinishedSession {
   comment: string;
   sets: FinishedSet[];
   newExercises: Exercise[];
+  /** replace the session type with this list of sets (exercise names, in order) */
+  templateUpdate?: string[];
 }
 
 const fmt = (n: number | null) => (n == null ? '' : String(Math.round(n * 100) / 100));
@@ -212,7 +214,23 @@ export async function saveSession(src: DataSource, s: FinishedSession): Promise<
       },
     });
   }
+  const tpl = s.templateUpdate;
+  if (tpl?.length) {
+    changes.push({
+      path: 'templates.json',
+      update: (cur: string | null) => {
+        let all: Record<string, TemplateStep[]> = {};
+        try {
+          all = JSON.parse(cur ?? '{}');
+        } catch {
+          /* rebuild from scratch */
+        }
+        all[s.name] = tpl.map((exercise) => ({ exercise }));
+        return JSON.stringify(all, null, 2) + '\n';
+      },
+    });
+  }
   const d = s.date.split('-').reverse().join('/');
-  await src.commit(changes, `${s.name} — ${d}`);
+  await src.commit(changes, `${s.name} — ${d}${tpl?.length ? ' (séance type mise à jour)' : ''}`);
   return sessionId;
 }

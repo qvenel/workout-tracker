@@ -13,6 +13,7 @@ import {
   propagate,
   restFor,
   restSignal,
+  templateChange,
 } from '../lib/session';
 import { CameraView } from './CameraView';
 import { ExercisePicker } from './ExercisePicker';
@@ -24,11 +25,11 @@ interface Props {
   data: Data;
   session: ActiveSession;
   onChange: (s: ActiveSession) => void;
-  onFinish: (comment: string) => void;
+  onFinish: (comment: string, updateTemplate: string[] | null) => void;
   onDiscard: () => void;
 }
 
-type Picker = { mode: 'add' } | { mode: 'replace'; stepId: string };
+type Picker = { mode: 'add' } | { mode: 'replace'; stepId: string; scope: 'one' | 'rest' };
 
 export function SessionView({ data, session, onChange, onFinish, onDiscard }: Props) {
   const [now, setNow] = useState(Date.now());
@@ -39,6 +40,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
   const [finishing, setFinishing] = useState(false);
   const [camera, setCamera] = useState<{ stepId: string } | null>(null);
   const [comment, setComment] = useState('');
+  const [updateTpl, setUpdateTpl] = useState(false);
   const [discardArmed, setDiscardArmed] = useState(false);
   const upcomingRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLElement>(null);
@@ -209,7 +211,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
       if (target) {
         const from = list.indexOf(target);
         list = list.map((s, i) => {
-          if (i < from || s.status !== 'todo' || s.exercise !== target.exercise) return s;
+          if (picker.scope === 'one' ? s.id !== target.id : i < from || s.status !== 'todo' || s.exercise !== target.exercise) return s;
           changed.add(s.id);
           return { ...s, exercise: ex.name };
         });
@@ -219,6 +221,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
     setPicker(null);
   };
 
+  const tplChange = finishing ? templateChange(data, session) : null;
   const menuStep = steps.find((s) => s.id === menuFor);
   const editStep = steps.find((s) => s.id === editing);
   const elapsed = (now - session.startedAt) / 1000;
@@ -378,8 +381,11 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
                 setMenuFor(null);
               }}>Faire maintenant</button>
             )}
-            <button type="button" onClick={() => { setPicker({ mode: 'replace', stepId: menuStep.id }); setMenuFor(null); }}>
-              Remplacer l'exo
+            <button type="button" onClick={() => { setPicker({ mode: 'replace', stepId: menuStep.id, scope: 'one' }); setMenuFor(null); }}>
+              Remplacer cette série
+            </button>
+            <button type="button" onClick={() => { setPicker({ mode: 'replace', stepId: menuStep.id, scope: 'rest' }); setMenuFor(null); }}>
+              Remplacer l'exo (séries restantes)
             </button>
             <button type="button" onClick={() => {
               const cur = sessionRef.current.steps;
@@ -426,7 +432,7 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
         <ExercisePicker
           data={data}
           extra={session.newExercises}
-          title={picker.mode === 'add' ? 'Ajouter un exo' : 'Remplacer par'}
+          title={picker.mode === 'add' ? 'Ajouter un exo' : picker.scope === 'one' ? 'Remplacer cette série par' : 'Remplacer l’exo par'}
           withCount={picker.mode === 'add'}
           onPick={onPick}
           onClose={() => setPicker(null)}
@@ -443,7 +449,16 @@ export function SessionView({ data, session, onChange, onFinish, onDiscard }: Pr
             Commentaire (optionnel)
             <textarea rows={3} value={comment} onInput={(e) => setComment((e.currentTarget as HTMLTextAreaElement).value)} />
           </label>
-          <button type="button" class="primary" disabled={!done.length} onClick={() => onFinish(comment)}>Enregistrer</button>
+          {tplChange && (
+            <label class="check tpl">
+              <input type="checkbox" checked={updateTpl} onChange={(e) => setUpdateTpl((e.currentTarget as HTMLInputElement).checked)} />
+              <span>
+                Mettre à jour la séance type « {session.name} »
+                <small>Elle reprendra les exos et l’ordre de cette séance, séries non faites comprises.</small>
+              </span>
+            </label>
+          )}
+          <button type="button" class="primary" disabled={!done.length} onClick={() => onFinish(comment, updateTpl ? tplChange : null)}>Enregistrer</button>
           <button type="button" class="link danger" onClick={() => (discardArmed ? onDiscard() : setDiscardArmed(true))}>
             {discardArmed ? 'Toucher encore pour confirmer' : 'Abandonner sans enregistrer'}
           </button>
